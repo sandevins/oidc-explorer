@@ -12,7 +12,6 @@ mod config;
 mod errors;
 mod logging;
 mod tui;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     crate::errors::init()?;
