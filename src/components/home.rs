@@ -280,8 +280,8 @@ impl Component for Home {
             .direction(Direction::Vertical)
             .margin(2)
             .constraints([
-                Constraint::Length(7), // logo
-                Constraint::Length(3), // title
+                Constraint::Length(11), // logo
+                Constraint::Length(1), // title
                 Constraint::Length(3), // username
                 Constraint::Length(3), // password
                 Constraint::Length(3), // login button
@@ -290,24 +290,23 @@ impl Component for Home {
             ])
             .split(card_area);
 
-        // Logo area: try to load `src/img/gradiant.png` and render a small colored block representation.
         let logo_block = Block::default()
             .borders(Borders::NONE)
             .style(Style::new().bg(Color::Rgb(30, 30, 30)));
-            let logo = r"       /^^^^\
-      /      \
-     /  /\    \
-     \ /  \  /
-      \    /";
+            let logo = r"           /$$       /$$                                                /$$                                        
+          |__/      | $$                                               | $$                                        
+  /$$$$$$  /$$  /$$$$$$$  /$$$$$$$         /$$$$$$  /$$   /$$  /$$$$$$ | $$  /$$$$$$   /$$$$$$   /$$$$$$   /$$$$$$ 
+ /$$__  $$| $$ /$$__  $$ /$$_____//$$$$$$ /$$__  $$|  $$ /$$/ /$$__  $$| $$ /$$__  $$ /$$__  $$ /$$__  $$ /$$__  $$
+| $$  \ $$| $$| $$  | $$| $$     |______/| $$$$$$$$ \  $$$$/ | $$  \ $$| $$| $$  \ $$| $$  \__/| $$$$$$$$| $$  \__/
+| $$  | $$| $$| $$  | $$| $$             | $$_____/  >$$  $$ | $$  | $$| $$| $$  | $$| $$      | $$_____/| $$      
+|  $$$$$$/| $$|  $$$$$$$|  $$$$$$$       |  $$$$$$$ /$$/\  $$| $$$$$$$/| $$|  $$$$$$/| $$      |  $$$$$$$| $$      
+ \______/ |__/ \_______/ \_______/        \_______/|__/  \__/| $$____/ |__/ \______/ |__/       \_______/|__/      
+                                                             | $$                                                  
+                                                             | $$                                                  
+                                                             |__/                                                  ";
             let logo_para = Paragraph::new(logo).style(Style::new().fg(Color::Red)).alignment(Alignment::Center);
         frame.render_widget(logo_block.clone(), inner[0]);
         frame.render_widget(logo_para, inner[0]);
-
-        // Title
-        let title = Paragraph::new("OIDC Helper")
-            .style(Style::new().fg(Color::White).add_modifier(Modifier::BOLD))
-            .alignment(Alignment::Center);
-        frame.render_widget(title, inner[1]);
 
         // Input field rendering helper
         let render_input = |frame: &mut Frame, area: Rect, label: &str, value: &str, focused: bool, cursor_pos: usize, mask: bool| {
