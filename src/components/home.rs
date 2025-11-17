@@ -6,6 +6,7 @@ use crossterm::terminal::size as terminal_size;
 use ratatui::prelude::*;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use ratatui::layout::{Constraint, Direction, Layout, Flex};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
@@ -18,6 +19,7 @@ enum Focus {
     Password,
     LoginButton,
     ChangeServer,
+    ChangeServerUrl
 }
 
 impl Focus {
@@ -27,6 +29,7 @@ impl Focus {
             Focus::Password => Focus::LoginButton,
             Focus::LoginButton => Focus::ChangeServer,
             Focus::ChangeServer => Focus::Username,
+            Focus::ChangeServerUrl => Focus::ChangeServerUrl,
         }
     }
 
@@ -36,6 +39,7 @@ impl Focus {
             Focus::Password => Focus::Username,
             Focus::LoginButton => Focus::Password,
             Focus::ChangeServer => Focus::LoginButton,
+            Focus::ChangeServerUrl => Focus::ChangeServerUrl,
         }
     }
 }
@@ -43,6 +47,7 @@ impl Focus {
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
+    server_url: String,
 
     // UI state
     username: String,
@@ -50,6 +55,7 @@ pub struct Home {
     focus: Focus,
     cursor_pos: usize,
     status: String,
+    show_popup: bool,
 }
 
 impl Home {
@@ -62,6 +68,8 @@ impl Home {
             focus: Focus::Username,
             cursor_pos: 0,
             status: String::new(),
+            show_popup: false,
+            server_url: String::from("http://localhost:8080/.well-known/openid-configuration"),
         }
     }
 
@@ -80,6 +88,11 @@ impl Home {
             Focus::Password => {
                 let pos = min(self.cursor_pos, self.password.len());
                 self.password.insert(pos, ch);
+                self.cursor_pos = pos + ch.len_utf8();
+            }
+            Focus::ChangeServerUrl => {
+                let pos = min(self.cursor_pos, self.server_url.len());
+                self.server_url.insert(pos, ch);
                 self.cursor_pos = pos + ch.len_utf8();
             }
             _ => {}
@@ -105,6 +118,14 @@ impl Home {
                     self.cursor_pos = cut;
                 }
             }
+            Focus::ChangeServerUrl => {
+                if self.cursor_pos > 0 && !self.server_url.is_empty() {
+                    let new_pos = self.server_url[..self.cursor_pos].chars().rev().next().map(|c| c.len_utf8()).unwrap_or(1);
+                    let cut = self.cursor_pos - new_pos;
+                    self.server_url.replace_range(cut..self.cursor_pos, "");
+                    self.cursor_pos = cut;
+                }
+            }
             _ => {}
         }
     }
@@ -123,18 +144,45 @@ impl Home {
                     self.password.replace_range(self.cursor_pos..self.cursor_pos + next_len, "");
                 }
             }
+            Focus::ChangeServerUrl => {
+                if self.cursor_pos < self.server_url.len() {
+                    let next_len = self.server_url[self.cursor_pos..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+                    self.server_url.replace_range(self.cursor_pos..self.cursor_pos + next_len, "");
+                }
+            }
             _ => {}
         }
     }
 
     fn move_left(&mut self) {
         if self.cursor_pos > 0 {
-            self.cursor_pos = self.username[..self.cursor_pos]
-                .chars()
-                .rev()
-                .next()
-                .map(|c| self.cursor_pos - c.len_utf8())
-                .unwrap_or(0);
+            match self.focus {
+                Focus::Username => {
+                    self.cursor_pos = self.username[..self.cursor_pos]
+                        .chars()
+                        .rev()
+                        .next()
+                        .map(|c| self.cursor_pos - c.len_utf8())
+                        .unwrap_or(0);
+                }
+                Focus::Password => {
+                    self.cursor_pos = self.password[..self.cursor_pos]
+                        .chars()
+                        .rev()
+                        .next()
+                        .map(|c| self.cursor_pos - c.len_utf8())
+                        .unwrap_or(0);
+                }
+                Focus::ChangeServerUrl => {
+                    self.cursor_pos = self.server_url[..self.cursor_pos]
+                        .chars()
+                        .rev()
+                        .next()
+                        .map(|c| self.cursor_pos - c.len_utf8())
+                        .unwrap_or(0);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -142,12 +190,14 @@ impl Home {
         let len = match self.focus {
             Focus::Username => self.username.len(),
             Focus::Password => self.password.len(),
+            Focus::ChangeServerUrl => self.server_url.len(),
             _ => 0,
         };
         if self.cursor_pos < len {
             let next = match self.focus {
                 Focus::Username => self.username[self.cursor_pos..].chars().next().unwrap(),
                 Focus::Password => self.password[self.cursor_pos..].chars().next().unwrap(),
+                Focus::ChangeServerUrl => self.server_url[self.cursor_pos..].chars().next().unwrap(),
                 _ => '\0',
             };
             self.cursor_pos += next.len_utf8();
@@ -176,8 +226,16 @@ impl Component for Home {
                     self.focus = self.focus.next();
                 }
             }
-            KeyCode::Char('q') | KeyCode::Esc => {
+            KeyCode::Char('q') => {
                 return Ok(Some(Action::Quit));
+            }
+            KeyCode::Esc => {
+                if self.show_popup {
+                    self.show_popup = false;
+                    self.focus = Focus::ChangeServer;
+                } else {
+                    return Ok(Some(Action::Quit));
+                }
             }
             KeyCode::Left => self.move_left(),
             KeyCode::Right => self.move_right(),
@@ -186,13 +244,21 @@ impl Component for Home {
             KeyCode::Enter | KeyCode::Char(' ') => {
                 match self.focus {
                     Focus::LoginButton => {
-                        // For now, just set status and log
                         tracing::info!(username = %self.username, password = %self.password, "Login pressed");
                         self.set_status(format!("Logging in as '{}' (password {} chars)", self.username, self.password.len()));
                     }
                     Focus::ChangeServer => {
                         tracing::info!("Change server pressed");
-                        self.set_status("Change server pressed (TODO: implement)".to_string());
+                        self.show_popup = true;
+                        self.focus = Focus::ChangeServerUrl;
+                        self.cursor_pos = self.server_url.len();
+                        self.set_status("Editing server URL".to_string());
+                    }
+                    Focus::ChangeServerUrl => {
+                        // Accept popup (close)
+                        self.show_popup = false;
+                        self.focus = Focus::ChangeServer;
+                        self.set_status("Server URL updated".to_string());
                     }
                     _ => {}
                 }
@@ -211,7 +277,6 @@ impl Component for Home {
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         // Very basic hit-testing: when clicked inside certain Y ranges, focus corresponding widget.
         if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            let x = mouse.column as u16;
             let y = mouse.row as u16;
             // We'll emit a special action to trigger a redraw and store focus.
             // The draw function computes geometry; here we approximate by using the terminal size via config.
@@ -238,6 +303,7 @@ impl Component for Home {
             } else {
                 self.focus = Focus::ChangeServer;
                 tracing::info!("Change server pressed (mouse)");
+                self.show_popup = true;
                 self.set_status("Change server pressed (TODO: implement)".to_string());
             }
         }
@@ -333,7 +399,7 @@ impl Component for Home {
             if focused {
                 let cx = input_area.x + 1 + cursor_pos as u16; // naive: treat chars as single width
                 let cy = input_area.y + input_area.height / 2;
-                frame.set_cursor(cx, cy);
+                frame.set_cursor_position((cx, cy));
             }
         };
 
@@ -376,6 +442,41 @@ impl Component for Home {
         let status = Paragraph::new(self.status.clone()).style(Style::new().fg(Color::LightBlue)).wrap(Wrap { trim: true });
         frame.render_widget(status, inner[6]);
 
+        if self.show_popup {
+            self.focus = Focus::ChangeServerUrl;
+            let block = Block::bordered().title("Change Server");
+            let area = popup_area(area, 60, 20);
+            frame.render_widget(Clear, area); //this clears out the background
+            frame.render_widget(block, area);
+
+            let popup_inner = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(2)
+                .constraints([
+                    Constraint::Length(3), // label
+                    Constraint::Min(1),
+                ])
+                .split(area);
+
+            render_input(
+                frame,
+                popup_inner[0],
+                ".well_known URL",
+                &self.server_url,
+                true,
+                self.cursor_pos,
+                false,
+            );
+        }
+
         Ok(())
     }
 }
+
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+        let [area] = vertical.areas(area);
+        let [area] = horizontal.areas(area);
+        area
+    }
