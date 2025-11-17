@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use color_eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton};
 use crossterm::terminal::size as terminal_size;
 use ratatui::prelude::*;
 use ratatui::style::{Color, Modifier, Style};
@@ -210,7 +210,7 @@ impl Component for Home {
 
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         // Very basic hit-testing: when clicked inside certain Y ranges, focus corresponding widget.
-        if matches!(mouse.kind, MouseEventKind::Down(_)) {
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             let x = mouse.column as u16;
             let y = mouse.row as u16;
             // We'll emit a special action to trigger a redraw and store focus.
