@@ -288,14 +288,14 @@ impl Component for Home {
             let card_height = height / 2;
             let rel_y = if y > card_top { y - card_top } else { 0 };
             let third = card_height / 6;
-            if rel_y <= third * 4 {
+            if rel_y <= third * 5 {
                 self.focus = Focus::Username;
                 // set cursor position roughly
                 self.cursor_pos = min(rel_y as usize, self.username.len());
-            } else if rel_y <= third * 5 {
+            } else if rel_y <= third * 6 {
                 self.focus = Focus::Password;
                 self.cursor_pos = min(rel_y as usize, self.password.len());
-            } else if rel_y <= third * 6 {
+            } else if rel_y <= third * 7 {
                 self.focus = Focus::LoginButton;
                 // Activate on click
                 tracing::info!(username = %self.username, password_len = self.password.len(), "Login pressed (mouse)");
